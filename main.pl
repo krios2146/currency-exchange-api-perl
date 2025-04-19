@@ -65,16 +65,16 @@ sub find_all_exchange_rates {
           id => $_->{id},
           rate => $_->{rate},
           baseCurrency => {
-              id   => $_->{b_id},
-              name => $_->{b_full_name},
-              code => $_->{b_code},
-              sign => $_->{b_sign},
+            id   => $_->{b_id},
+            name => $_->{b_full_name},
+            code => $_->{b_code},
+            sign => $_->{b_sign},
           },
           targetCurrency => {
-              id   => $_->{t_id},
-              name => $_->{t_full_name},
-              code => $_->{t_code},
-              sign => $_->{t_sign},
+            id   => $_->{t_id},
+            name => $_->{t_full_name},
+            code => $_->{t_code},
+            sign => $_->{t_sign},
           }
         } 
       } @rows 
