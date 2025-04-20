@@ -37,6 +37,24 @@ sub find_all_currencies {
   return (undef, $currencies);
 }
 
+sub find_currency_by_code ($code) {
+  my $currency;
+
+  eval {
+    my $statement = $db_connection->prepare('SELECT * FROM Currencies WHERE code = ?');
+    $statement->execute($code);
+
+    $currency = $statement->fetchrow_hashref();
+  };
+
+  if ($@) {
+    app->log->error("Database call error: $@");
+    return (DBI::errstr, undef);
+  }
+
+  return (undef, $currency);
+}
+
 sub find_all_exchange_rates {
   my $exchage_rates;
 
@@ -114,6 +132,41 @@ get '/currencies' => sub ($c) {
   }
 
   $c->render(json => $currencies);
+};
+
+get '/currency/:code' => sub ($c) {
+  my $code = $c->param('code');
+
+  unless ($code =~ /^[A-Z]{3}$/) {
+    return $c->render(
+      status => 400,
+      json => { 
+        error => 'Invalid currency code format',
+        message => 'Currency code must be in the ISO-4217 format'
+      }
+    );
+  }
+
+  my ($err, $currency) = find_currency_by_code($code);
+
+  if (defined $err) {
+    $c->app->log->error("Error while fetching currency from DB: $err");
+
+    my $error_response = {
+      error   => 'Error reading currency', 
+      message => $err
+    };
+
+    $c->render(json => $error_response);
+
+    return;
+  }
+
+  $c->app->log->info("Found " . $currency->{code} . " currency");
+
+  $currency->{name} = delete $currency->{full_name};
+
+  $c->render(json => $currency);
 };
 
 get '/exchangeRates' => sub ($c) {
