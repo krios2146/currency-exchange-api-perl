@@ -196,7 +196,7 @@ get '/currencies' => sub ($c) {
       message => $err
     };
 
-    $c->render(json => $error_response);
+    $c->render(status => 500, json => $error_response);
 
     return;
   }
@@ -207,20 +207,21 @@ get '/currencies' => sub ($c) {
     $currency->{name} = delete $currency->{full_name};
   }
 
-  $c->render(json => $currencies);
+  $c->render(status => 200, json => $currencies);
 };
 
 get '/currency/:code' => sub ($c) {
   my $code = $c->param('code');
 
   unless ($code =~ /^[A-Z]{3}$/) {
-    return $c->render(
-      status => 400,
-      json => { 
-        error   => 'Invalid currency code format',
-        message => 'Currency code must be in the ISO-4217 format'
-      }
-    );
+    $c->app->log->error("Ivalid parameter code = $code");
+
+    my $error_response = {
+      error   => 'Invalid currency code format',
+      message => 'Currency code must be in the ISO-4217 format'
+    };
+
+    return $c->render(status => 400, json => $error_response);
   }
 
   my ($err, $currency) = find_currency_by_code($code);
@@ -233,7 +234,7 @@ get '/currency/:code' => sub ($c) {
       message => $err
     };
 
-    $c->render(json => $error_response);
+    $c->render(status => 500, json => $error_response);
 
     return;
   }
@@ -245,7 +246,7 @@ get '/currency/:code' => sub ($c) {
       message => "Currency $code not found"
     };
 
-    $c->render(json => $error_response);
+    $c->render(status => 404, json => $error_response);
 
     return;
   }
@@ -254,7 +255,7 @@ get '/currency/:code' => sub ($c) {
 
   $currency->{name} = delete $currency->{full_name};
 
-  $c->render(json => $currency);
+  $c->render(status => 200, json => $currency);
 };
 
 post '/currencies' => sub ($c) {
@@ -263,13 +264,16 @@ post '/currencies' => sub ($c) {
   my $sign = $c->param('sign');
 
   unless (defined $name || defined $code || defined $sign) {
-    return $c->render(
-      status => 400,
-      json => { 
-        error   => 'Missing required parameters',
-        message => 'Missing required parameters'
-      }
-    );
+    $c->app->log->error("Parameter(s) missing; name = $name, code = $code, sign = $sign");
+
+    my $error_response = {
+      error   => 'Missing required paramters', 
+      message => 'Missing required paramters'
+    };
+
+    $c->render(status => 400, json => $error_response);
+
+    return;
   }
 
   my ($err, $currency) = save_currency($name, $code, $sign);
@@ -282,7 +286,7 @@ post '/currencies' => sub ($c) {
       message => $err
     };
 
-    $c->render(json => $error_response);
+    $c->render(status => 500, json => $error_response);
 
     return;
   }
@@ -291,7 +295,7 @@ post '/currencies' => sub ($c) {
 
   $currency->{name} = delete $currency->{full_name};
 
-  $c->render(json => $currency);
+  $c->render(status => 201, json => $currency);
 };
 
 get '/exchangeRates' => sub ($c) {
@@ -305,14 +309,14 @@ get '/exchangeRates' => sub ($c) {
       message => $err
     };
 
-    $c->render(json => $error_response);
+    $c->render(status => 500, json => $error_response);
 
     return;
   }
 
   $c->app->log->info("Found " . scalar(@$exchange_rates) . " exchange rates");
 
-  $c->render(json => $exchange_rates);
+  $c->render(status => 200, json => $exchange_rates);
 };
 
 get '/exchangeRate/:codes' => sub ($c) {
@@ -322,14 +326,13 @@ get '/exchangeRate/:codes' => sub ($c) {
     $c->app->log->error("Invalid parameter codes = $codes");
 
     my $error_response = {
-      error => 'Invalid currency pair format',
+      error   => 'Invalid currency pair format',
       message => 'Currency codes must be in the ISO-4217 format'
     };
 
-    return $c->render(
-      status => 400,
-      json   => $error_response 
-    );
+    $c->render(status => 400, json => $error_response);
+
+    return;
   }
 
   my ($base_code, $target_code) = ($1, $2);
@@ -363,7 +366,7 @@ get '/exchangeRate/:codes' => sub ($c) {
 
   $c->app->log->info("Found $base_code -> $target_code exchange rate");
 
-  $c->render(json => $exchange_rate);
+  $c->render(status => 200, json => $exchange_rate);
 };
 
 app->start;
