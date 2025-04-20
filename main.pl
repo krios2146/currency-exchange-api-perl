@@ -155,26 +155,22 @@ sub find_exchange_rate_by_codes ($base_code, $target_code) {
       return;
     }
 
-    $exchange_rate = [
-      map { 
-        { 
-          id => $_->{id},
-          rate => $_->{rate},
-          baseCurrency => {
-            id   => $_->{b_id},
-            name => $_->{b_full_name},
-            code => $_->{b_code},
-            sign => $_->{b_sign},
-          },
-          targetCurrency => {
-            id   => $_->{t_id},
-            name => $_->{t_full_name},
-            code => $_->{t_code},
-            sign => $_->{t_sign},
-          }
-        } 
-      } $exchange_rate 
-    ];
+    $exchange_rate = { 
+      id => $exchange_rate->{id},
+      rate => $exchange_rate->{rate},
+      baseCurrency => {
+        id   => $exchange_rate->{b_id},
+        name => $exchange_rate->{b_full_name},
+        code => $exchange_rate->{b_code},
+        sign => $exchange_rate->{b_sign},
+      },
+      targetCurrency => {
+        id   => $exchange_rate->{t_id},
+        name => $exchange_rate->{t_full_name},
+        code => $exchange_rate->{t_code},
+        sign => $exchange_rate->{t_sign},
+      }
+    } 
   };
 
   if ($@) {
@@ -544,6 +540,67 @@ patch '/exchangeRate/:codes' => sub ($c) {
   $c->app->log->info("Updated $base_code -> $target_code exchange rate");
 
   $c->render(status => 200, json => $exchange_rate);
+};
+
+get '/exchange' => sub ($c) {
+  my $base_code = $c->param('from');
+  my $target_code = $c->param('to');
+  my $amount = $c->param('amount');
+
+  unless ($base_code =~ /^[A-Z]{3}$/ || $target_code =~ /^[A-Z]{3}$/) {
+    $c->app->log->error("Invalid currency code parameter; from = $base_code, to = $target_code");
+
+    my $error_response = {
+      error   => 'Invalid currency code format',
+      message => 'Currency codes must be in the ISO-4217 format'
+    };
+
+    $c->render(status => 400, json => $error_response);
+
+    return;
+  }
+
+  my ($err, $exchange_rate) = find_exchange_rate_by_codes($base_code, $target_code);
+
+  if (defined $err) {
+    $c->app->log->error("Error while fetching exchange rates from DB: $err");
+
+    my $error_response = {
+      error   => 'Error reading exchange rates', 
+      message => $err
+    };
+
+    $c->render(status => 500, json => $error_response);
+
+    return;
+  }
+
+  if (!defined $exchange_rate) {
+    $c->app->log->error("Exchange rate $base_code -> $target_code not found");
+
+    my $error_response = {
+      error   => 'Not Found', 
+      message => "Exchange rate $base_code -> $target_code not found"
+    };
+
+    $c->render(status => 404, json => $error_response);
+
+    return;
+  }
+
+  my $converted_amount = $amount * $exchange_rate->{rate};
+
+  $c->app->log->info("Converted $amount $base_code -> $converted_amount $target_code");
+
+  my $conversion_result = {
+    baseCurrency    => $exchange_rate->{baseCurrency},
+    targetCurrency  => $exchange_rate->{targetCurrency},
+    rate            => $exchange_rate->{rate},
+    amount          => $amount,
+    convertedAmount => $converted_amount
+  };
+
+  $c->render(status => 200, json => $conversion_result);
 };
 
 app->start;
