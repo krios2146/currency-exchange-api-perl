@@ -185,6 +185,29 @@ sub find_exchange_rate_by_codes ($base_code, $target_code) {
   return (undef, $exchange_rate);
 }
 
+sub save_exchange_rate_for ($base_currency_code, $target_currency_code, $rate) {
+  eval {
+    my $query = '
+      INSERT INTO Exchange_rates (base_currency_id, target_currency_id, rate)
+      VALUES (
+        (SELECT id FROM Currencies WHERE code = ?),
+        (SELECT id FROM Currencies WHERE code = ?),
+        ?
+      )';
+
+    my $statement = $db_connection->prepare($query);
+
+    $statement->execute($base_currency_code, $target_currency_code, $rate);
+  };
+
+  if ($@) {
+    app->log->error("Database call error: $@");
+    return (DBI::errstr, undef);
+  }
+
+  return (undef, undef);
+}
+
 get '/currencies' => sub ($c) {
   my ($err, $currencies) = find_all_currencies();
 
@@ -367,6 +390,72 @@ get '/exchangeRate/:codes' => sub ($c) {
   $c->app->log->info("Found $base_code -> $target_code exchange rate");
 
   $c->render(status => 200, json => $exchange_rate);
+};
+
+post '/exchangeRates' => sub ($c) {
+  my $base_currency_code = $c->param('baseCurrencyCode');
+  my $target_currency_code = $c->param('targetCurrencyCode');
+  my $rate = $c->param('rate');
+
+  unless ($base_currency_code =~ /^[A-Z]{3}$/ || $target_currency_code =~ /^[A-Z]{3}$/) {
+    $c->app->log->error("Invalid currency code parameter; baseCurrencyCode = $base_currency_code, targetCurrencyCode = $target_currency_code");
+
+    my $error_response = {
+      error   => 'Invalid currency code format',
+      message => 'Currency codes must be in the ISO-4217 format'
+    };
+
+    $c->render(status => 400, json => $error_response);
+
+    return;
+  }
+
+  my ($err, $res) = save_exchange_rate_for($base_currency_code, $target_currency_code, $rate);
+
+  if (defined $err) {
+    $c->app->log->error("Error while saving exchange rate $base_currency_code -> $target_currency_code");
+
+    my $error_response = {
+      error   => 'Error saving exchange rate', 
+      message => $err
+    };
+
+    $c->render(status => 500, json => $error_response);
+
+    return;
+  }
+
+  ($err, my $exchange_rate) = find_exchange_rate_by_codes($base_currency_code, $target_currency_code);
+
+  if (defined $err) {
+    $c->app->log->error("Error while saving exchange rate $base_currency_code -> $target_currency_code");
+
+    my $error_response = {
+      error   => 'Error saving exchange rate', 
+      message => $err
+    };
+
+    $c->render(status => 500, json => $error_response);
+
+    return;
+  }
+
+  if (!defined $exchange_rate) {
+    $c->app->log->error("Error while saving exchange rate $base_currency_code -> $target_currency_code");
+
+    my $error_response = {
+      error   => 'Error saving exchange rate', 
+      message => $err
+    };
+
+    $c->render(status => 500, json => $error_response);
+
+    return;
+  }
+
+  $c->app->log->info("Saved $base_currency_code -> $target_currency_code exchange rate");
+
+  $c->render(status => 201, json => $exchange_rate);
 };
 
 app->start;
